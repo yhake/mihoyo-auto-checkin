@@ -5,8 +5,8 @@ name: 🎯 Daily Check-in
 
 on:
   workflow_dispatch:          # 🚀 手动触发
-  # schedule:
-  #   - cron: '5 16 * * *'      # 🕒 每天 16:05 UTC (00:05 UTC+8)
+  schedule:
+     - cron: '5 16 * * *'      # 🕒 每天 16:05 UTC (00:05 UTC+8)
 
 permissions:
   contents: read              # 📁 仅读取仓库代码
