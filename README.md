@@ -65,4 +65,6 @@ rm -rf MihoyoBBSTools.git
 - **修改方法**：编辑 `.github/workflows/Checkin.yml` 中的：
   ```yaml
   - cron: '5 16 * * *'  # UTC时间，北京时间+8
+
+  
   ```
