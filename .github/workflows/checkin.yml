@@ -48,27 +48,14 @@ jobs:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
         run: |
-          # 确保 config 目录存在
           mkdir -p config
-          # 从模板复制
-          cp config/push.ini config/push.ini.tmp 2>/dev/null || true
-          # 直接使用您已有的 push.ini 作为模板，替换占位符
+          # 如果模板文件是 config/push.template.ini，则用这个；如果是 config/push.ini 直接修改
+          if [ -f config/push.template.ini ]; then
+            cp config/push.template.ini config/push.ini
+          fi
           sed -i "s|{{FEISHU_WEBHOOK}}|$FEISHU_WEBHOOK|g" config/push.ini
           sed -i "s|{{WECHAT_WEBHOOK}}|$WECHAT_WEBHOOK|g" config/push.ini
-          # 可选：查看生成后的文件（调试用，建议注释掉）
-          # cat config/push.ini
 
-      # ===== 新增：调用 push.py 发送通知 =====
-      - name: 📢 Send notification via push.py
-        if: always()
-        run: |
-          # 确定状态码（0: 成功, 1: 失败）
-          if [ "${{ job.status }}" == "success" ]; then
-            STATUS=0
-          else
-            STATUS=1
-          fi
-          # 构建消息内容（可从日志中提取更多细节）
-          MESSAGE="签到任务已完成，详情请查看 GitHub Actions 日志。"
-          # 调用 push 函数
-          python -c "from push import push; push($STATUS, '$MESSAGE')"
+      # ===== 执行签到（内部会自动推送）=====
+      - name: 🏃‍♂️ Execute check-in
+        run: python main.py
