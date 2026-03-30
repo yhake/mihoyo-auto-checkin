@@ -2,6 +2,7 @@ import os
 import re
 import hmac
 import time
+import pytz
 import base64
 import config
 import urllib
@@ -240,20 +241,68 @@ class PushHandler:
 
     def wecomrobot(self, status_id, push_message):
         """
-        企业微信机器人
+        企业微信机器人推送（Markdown格式，美观版）
         """
-        rep = self.http.post(
-            url=f'{self.cfg.get("wecomrobot", "url")}',
-            headers={"Content-Type": "application/json; charset=utf-8"},
-            json={
-                "msgtype": "text",
-                "text": {
-                    "content": get_push_title(status_id) + "\r\n" + push_message,
-                    "mentioned_mobile_list": [f'{self.cfg.get("wecomrobot", "mobile")}']
-                }
+        api_url = self.cfg.get('wecomrobot', 'url')
+        if not api_url:
+            log.warning("企业微信 Webhook 未配置")
+            return
+
+        title_text = get_push_title(status_id)
+        
+        # 状态图标
+        if status_id == 0:
+            status_icon = "✅"
+        elif status_id == 1:
+            status_icon = "❌"
+        else:
+            status_icon = "⚠️"
+
+        # 获取仓库链接
+        repo_url = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+        repo_name = os.getenv("GITHUB_REPOSITORY", "yhake/mihoyo-auto-checkin")
+        full_repo_url = f"{repo_url}/{repo_name}"
+        
+        # 获取运行日志链接
+        run_url = os.getenv("RUN_URL", full_repo_url)
+
+        # 获取东八区时间
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        current_time = datetime.now(beijing_tz).strftime("%Y-%m-%d %H:%M:%S")
+
+        # 处理消息内容（限制长度）
+        message_content = push_message.strip()
+        if len(message_content) > 2000:
+            message_content = message_content[:2000] + "\n\n... (内容过长，请查看日志)"
+
+        # 构建 Markdown 消息
+        markdown_content = f"""## {status_icon} {title_text}
+
+{message_content}
+
+---
+**⏰ 时间**：{current_time}
+
+[🔗 查看仓库]({full_repo_url}) | [📋 查看日志]({run_url})"""
+
+        markdown_data = {
+            "msgtype": "markdown",
+            "markdown": {
+                "content": markdown_content
             }
-        ).json()
-        log.info(f"推送结果：{rep.get('errmsg')}")
+        }
+
+        # 添加 @ 提醒（如果配置了手机号）
+        mobile = self.cfg.get('wecomrobot', 'mobile', fallback=None)
+        if mobile:
+            markdown_data["markdown"]["mentioned_mobile_list"] = [mobile]
+
+        try:
+            response = self.http.post(api_url, json=markdown_data, headers={"Content-Type": "application/json"})
+            result = response.json()
+            log.info(f"企业微信推送结果：{result.get('errmsg', '成功')}")
+        except Exception as e:
+            log.warning(f"企业微信推送失败：{e}")
 
     def pushdeer(self, status_id, push_message):
         """
@@ -297,17 +346,107 @@ class PushHandler:
 
     def feishubot(self, status_id, push_message):
         """
-        飞书机器人(WebHook)
+        飞书机器人推送（卡片格式，美观版）
         """
-        api_url = self.cfg.get('feishubot', 'webhook')  # https://open.feishu.cn/open-apis/bot/v2/hook/XXX
-        rep = self.http.post(
-            url=api_url,
-            headers={"Content-Type": "application/json; charset=utf-8"},
-            json={
-                "msg_type": "text", "content": {"text": get_push_title(status_id) + "\r\n" + push_message}
+        api_url = self.cfg.get('feishubot', 'webhook')
+        if not api_url:
+            log.warning("飞书 Webhook 未配置")
+            return
+
+        # 根据状态设置卡片颜色和图标
+        title_text = get_push_title(status_id)
+        if status_id == 0:
+            card_color = "green"
+            status_icon = "✅"
+        elif status_id == 1:
+            card_color = "red"
+            status_icon = "❌"
+        elif status_id == 2:
+            card_color = "orange"
+            status_icon = "⚠️"
+        else:
+            card_color = "grey"
+            status_icon = "🔔"
+
+        # 获取仓库链接
+        repo_url = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+        repo_name = os.getenv("GITHUB_REPOSITORY", "yhake/mihoyo-auto-checkin")
+        full_repo_url = f"{repo_url}/{repo_name}"
+        
+        # 获取运行日志链接
+        run_url = os.getenv("RUN_URL", full_repo_url)
+
+        # 获取东八区时间
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        current_time = datetime.now(beijing_tz).strftime("%Y-%m-%d %H:%M:%S")
+
+        # 处理消息内容（限制长度，避免卡片过长）
+        message_content = push_message.strip()
+        if len(message_content) > 2000:
+            message_content = message_content[:2000] + "\n\n... (内容过长，请查看日志)"
+
+        # 构建飞书卡片 JSON
+        card_data = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {
+                        "content": f"{status_icon} {title_text}",
+                        "tag": "plain_text"
+                    },
+                    "template": card_color
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "content": message_content,
+                            "tag": "lark_md"
+                        }
+                    },
+                    {
+                        "tag": "hr"
+                    },
+                    {
+                        "tag": "div",
+                        "text": {
+                            "content": f"**⏰ 时间**：{current_time}",
+                            "tag": "lark_md"
+                        }
+                    },
+                    {
+                        "tag": "action",
+                        "actions": [
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "content": "🔗 查看仓库",
+                                    "tag": "plain_text"
+                                },
+                                "type": "default",
+                                "url": full_repo_url
+                            },
+                            {
+                                "tag": "button",
+                                "text": {
+                                    "content": "📋 查看日志",
+                                    "tag": "plain_text"
+                                },
+                                "type": "default",
+                                "url": run_url
+                            }
+                        ]
+                    }
+                ]
             }
-        ).json()
-        log.info(f"推送结果：{rep.get('msg')}")
+        }
+
+        try:
+            response = self.http.post(api_url, json=card_data, headers={"Content-Type": "application/json"})
+            result = response.json()
+            log.info(f"飞书推送结果：{result.get('msg', '成功')}")
+        except Exception as e:
+            log.warning(f"飞书推送失败：{e}")
 
     def bark(self, status_id, push_message):
         """
@@ -481,9 +620,6 @@ class PushHandler:
         }
         rep = self.http.post(url=url, json=data)
         log.debug(rep.text)
-
-    # 其他推送方法，例如 ftqq, pushplus 等, 和 telegram 方法相似
-    # 在类内部直接使用 self.cfg 读取配置
 
     def push(self, status, push_message):
         if not self.load_config():
