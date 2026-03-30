@@ -59,3 +59,7 @@ jobs:
       # ===== 执行签到（内部会自动推送）=====
       - name: 🏃‍♂️ Execute check-in
         run: python main.py
+        env:
+          cookie: ${{ secrets.COOKIE }}
+          stoken: ${{ secrets.STOKEN }}
+          CAPTCHA_ENDPOINT: ${{ secrets.CAPTCHA_ENDPOINT }}
